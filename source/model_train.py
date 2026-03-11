@@ -31,6 +31,9 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     field_comp.lmbda = torch.tensor(disp[0]).to(device)
 
     loss_data = list()
+    dt = training_dict.get("dt", 1.0)
+    phase_mode = training_dict.get("phase_mode", "static")
+    d_prev = hist_alpha.detach().clone()
     start = time.time()
 
     n_epochs = max(optimizer_dict["n_epochs_LBFGS"], 1)
@@ -38,7 +41,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     optimizer = get_optimizer(NNparams, "LBFGS")
     loss_data1 = fit(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                      optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, 
-                     intermediateModel_path=None, writer=writer, training_dict=training_dict)
+                     intermediateModel_path=None, writer=writer, training_dict=training_dict,
+                     d_prev=d_prev, dt=dt, phase_mode="static")
     loss_data = loss_data + loss_data1
 
     n_epochs = optimizer_dict["n_epochs_RPROP"]
@@ -46,7 +50,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     optimizer = get_optimizer(NNparams, "RPROP")
     loss_data2 = fit_with_early_stopping(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                                          optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, min_delta=optimizer_dict["optim_rel_tol_pretrain"], 
-                                         intermediateModel_path=None, writer=writer, training_dict=training_dict)
+                                         intermediateModel_path=None, writer=writer, training_dict=training_dict,
+                                         d_prev=d_prev, dt=dt, phase_mode="static")
     loss_data = loss_data + loss_data2
 
     end = time.time()
@@ -56,6 +61,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     with open(trainedModel_path/Path('trainLoss_1NN_initTraining.npy'), 'wb') as file:
         np.save(file, np.asarray(loss_data))
 
+    d_prev = field_comp.update_hist_alpha(inp).detach()
+
     ## #############################################################################
 
 
@@ -64,6 +71,7 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
 
     # Prepare input data
     inp, T_conn, area_T, hist_alpha = prep_input_data(matprop, pffmodel, crack_dict, numr_dict, mesh_file=fine_mesh_file, device=device)
+    d_prev = hist_alpha.detach().clone()
     outp = torch.zeros(inp.shape[0], 1).to(device)
     training_set = DataLoader(torch.utils.data.TensorDataset(inp, outp), batch_size=inp.shape[0], shuffle=False)
 
@@ -81,7 +89,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
             optimizer = get_optimizer(NNparams, "LBFGS")
             loss_data1 = fit(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                              optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer,
-                             intermediateModel_path=None, writer=writer, training_dict=training_dict)
+                             intermediateModel_path=None, writer=writer, training_dict=training_dict,
+                             d_prev=d_prev, dt=dt, phase_mode=phase_mode)
             loss_data = loss_data + loss_data1
 
         if optimizer_dict["n_epochs_RPROP"] > 0:
@@ -90,13 +99,20 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
             optimizer = get_optimizer(NNparams, "RPROP")
             loss_data2 = fit_with_early_stopping(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                                                  optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, min_delta=optimizer_dict["optim_rel_tol"],
-                                                 intermediateModel_path=intermediateModel_path, writer=writer, training_dict=training_dict)
+                                                 intermediateModel_path=intermediateModel_path, writer=writer, training_dict=training_dict,
+                                                 d_prev=d_prev, dt=dt, phase_mode=phase_mode)
             loss_data = loss_data + loss_data2
 
         end = time.time()
         print(f"Execution time: {(end-start)/60:.03f}minutes")
 
-        hist_alpha = field_comp.update_hist_alpha(inp)
+        d_curr = field_comp.update_hist_alpha(inp)
+        if phase_mode == "viscous_time":
+            d_prev = d_curr.detach()
+        elif phase_mode == "static":
+            hist_alpha = d_curr.detach()
+        else:
+            raise ValueError(f"Unsupported phase_mode: {phase_mode}")
 
         torch.save(field_comp.net.state_dict(), trainedModel_path/Path('trained_1NN_' + str(j) + '.pt'))
         with open(trainedModel_path/Path('trainLoss_1NN_' + str(j) + '.npy'), 'wb') as file:
