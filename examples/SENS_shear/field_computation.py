@@ -37,16 +37,18 @@ class FieldComputation:
         out_disp = out[:, 0:2]
         
         alpha = self.alpha_constraint(out[:, 2])
+        d = alpha
+        T = out[:, 3]
 
         u = ((inp[:, -1]-y0)*(yL-inp[:, -1])*out_disp[:, 0] + \
                 (inp[:, -1]-y0)/(yL-y0)*torch.cos(self.theta))*self.lmbda
         v = ((inp[:, -1]-y0)*(yL-inp[:, -1])*out_disp[:, 1] + \
             (inp[:, -1]-y0)/(yL-y0)*torch.sin(self.theta))*self.lmbda
 
-        return u, v, alpha
+        return u, v, d, T
     
     def update_hist_alpha(self, inp):
-        _, _, pred_alpha = self.fieldCalculation(inp)
+        _, _, pred_alpha, _ = self.fieldCalculation(inp)
         pred_alpha = pred_alpha.detach()
         return pred_alpha
     
