@@ -4,6 +4,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from compute_energy import compute_energy
+from phase_evolution import compute_phase_evolution_loss
 
 
 class EarlyStopping:
@@ -28,8 +29,28 @@ class EarlyStopping:
 
 
 
+def _resolve_phase_training_params(training_dict, phase_mode, d_prev, dt, eta_pf, GcI):
+    params = {} if training_dict is None else dict(training_dict)
+    params.setdefault("save_model_every_n", 0)
+    params.setdefault("w_phase_evo", 0.0)
+    params.setdefault("phase_mode", "static")
+
+    return {
+        "training_dict": params,
+        "phase_mode": params["phase_mode"] if phase_mode is None else phase_mode,
+        "d_prev": params.get("d_prev") if d_prev is None else d_prev,
+        "dt": params.get("dt") if dt is None else dt,
+        "eta_pf": params.get("eta_pf") if eta_pf is None else eta_pf,
+        "GcI": params.get("GcI") if GcI is None else GcI,
+        "w_phase_evo": params["w_phase_evo"],
+    }
+
+
 def fit(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matprop, pffmodel, 
-        weight_decay, num_epochs, optimizer, intermediateModel_path=None, writer=None, training_dict={}):
+        weight_decay, num_epochs, optimizer, phase_mode=None, d_prev=None, dt=None, eta_pf=None, GcI=None,
+        intermediateModel_path=None, writer=None, training_dict=None):
+    phase_params = _resolve_phase_training_params(training_dict, phase_mode, d_prev, dt, eta_pf, GcI)
+    training_dict = phase_params["training_dict"]
     loss_data = list()
     
     # Loop over epochs
@@ -45,6 +66,16 @@ def fit(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matpro
                 u, v, d, T = field_comp.fieldCalculation(inp_train)
                 loss_E_el, loss_E_d, loss_hist = compute_energy(inp_train, u, v, d, hist_alpha, matprop, pffmodel, area_T, T_conn)
                 loss_var = torch.log10(loss_E_el + loss_E_d + loss_hist)
+                loss_phase_evo = torch.zeros_like(loss_var)
+
+                if phase_params["phase_mode"] == "viscous_time":
+                    loss_phase_evo = compute_phase_evolution_loss(
+                        d=d,
+                        d_prev=phase_params["d_prev"],
+                        dt=phase_params["dt"],
+                        eta_pf=phase_params["eta_pf"],
+                        GcI=phase_params["GcI"],
+                    )
 
                 # weight regularization
                 loss_reg = 0.0
@@ -53,13 +84,23 @@ def fit(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matpro
                         if 'weight' in name:
                             loss_reg += torch.sum(param**2)
 
-                loss = loss_var + weight_decay*loss_reg
+                loss = loss_var + phase_params["w_phase_evo"]*loss_phase_evo + weight_decay*loss_reg
 
                 if writer is not None:
-                    writer.add_scalars('U_p_'+str(field_comp.lmbda.item()), {'loss':loss.item(), "loss_E":loss_var.item()}, epoch)
+                    writer.add_scalars(
+                        'U_p_'+str(field_comp.lmbda.item()),
+                        {
+                            'loss': loss.item(),
+                            'loss_E': loss_var.item(),
+                            'loss_phase_evo': loss_phase_evo.item(),
+                            'loss_phase_evo_weighted': (phase_params["w_phase_evo"]*loss_phase_evo).item(),
+                            'loss_reg_weighted': (weight_decay*loss_reg).item(),
+                        },
+                        epoch,
+                    )
 
                 loop.set_description(f"U_p: {field_comp.lmbda}, Epoch [{epoch}/{num_epochs}]")
-                loop.set_postfix(loss=loss.item(), loss_E=loss_var.item())
+                loop.set_postfix(loss=loss.item(), loss_E=loss_var.item(), loss_phase_evo=loss_phase_evo.item())
                 
                 loss_data.append(loss.item())
                 if intermediateModel_path is not None:
@@ -80,7 +121,10 @@ def fit(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matpro
 
 
 def fit_with_early_stopping(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matprop, pffmodel, 
-                            weight_decay, num_epochs, optimizer, min_delta, intermediateModel_path=None, writer=None, training_dict={}):
+                            weight_decay, num_epochs, optimizer, min_delta, phase_mode=None, d_prev=None, dt=None, eta_pf=None, GcI=None,
+                            intermediateModel_path=None, writer=None, training_dict=None):
+    phase_params = _resolve_phase_training_params(training_dict, phase_mode, d_prev, dt, eta_pf, GcI)
+    training_dict = phase_params["training_dict"]
     loss_data = list()
     early_stopping = EarlyStopping(tol_steps=10, min_delta=min_delta, device=area_T.device)
     loss_prev = torch.tensor([0.0], device=area_T.device)
@@ -97,6 +141,16 @@ def fit_with_early_stopping(field_comp, training_set_collocation, T_conn, area_T
             u, v, d, T = field_comp.fieldCalculation(inp_train)
             loss_E_el, loss_E_d, loss_hist = compute_energy(inp_train, u, v, d, hist_alpha, matprop, pffmodel, area_T, T_conn)
             loss_var = torch.log10(loss_E_el + loss_E_d + loss_hist)
+            loss_phase_evo = torch.zeros_like(loss_var)
+
+            if phase_params["phase_mode"] == "viscous_time":
+                loss_phase_evo = compute_phase_evolution_loss(
+                    d=d,
+                    d_prev=phase_params["d_prev"],
+                    dt=phase_params["dt"],
+                    eta_pf=phase_params["eta_pf"],
+                    GcI=phase_params["GcI"],
+                )
 
             # weight regularization
             loss_reg = 0.0
@@ -105,13 +159,23 @@ def fit_with_early_stopping(field_comp, training_set_collocation, T_conn, area_T
                     if 'weight' in name:
                         loss_reg += torch.sum(param**2)
 
-            loss = loss_var + weight_decay*loss_reg
+            loss = loss_var + phase_params["w_phase_evo"]*loss_phase_evo + weight_decay*loss_reg
 
             if writer is not None:
-                    writer.add_scalars('U_p_'+str(field_comp.lmbda.item()), {'loss':loss.item(), "loss_E":loss_var.item()}, epoch)
+                    writer.add_scalars(
+                        'U_p_'+str(field_comp.lmbda.item()),
+                        {
+                            'loss': loss.item(),
+                            'loss_E': loss_var.item(),
+                            'loss_phase_evo': loss_phase_evo.item(),
+                            'loss_phase_evo_weighted': (phase_params["w_phase_evo"]*loss_phase_evo).item(),
+                            'loss_reg_weighted': (weight_decay*loss_reg).item(),
+                        },
+                        epoch,
+                    )
 
             loop.set_description(f"U_p: {field_comp.lmbda}, Epoch [{epoch}/{num_epochs}]")
-            loop.set_postfix(loss=loss.item(), loss_E=loss_var.item())
+            loop.set_postfix(loss=loss.item(), loss_E=loss_var.item(), loss_phase_evo=loss_phase_evo.item())
 
             loss_data.append(loss.item())
             if intermediateModel_path is not None:

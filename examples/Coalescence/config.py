@@ -55,7 +55,7 @@ optimizer_dict = {"weight_decay": 1e-5,
 
 
 # save intermediate model during training every "save_model_every_n" steps
-training_dict = {"save_model_every_n": 100}
+training_dict = {"save_model_every_n": 100, "w_phase_evo": 0.0}
 
 '''
 numr_dict:
