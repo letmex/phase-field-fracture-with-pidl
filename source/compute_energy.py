@@ -100,6 +100,16 @@ def strain_energy_with_split(strain_11, strain_22, strain_12, alpha, matprop, pf
     return E_el, E_el_p
 
 
+def positive_strain_energy_density(strain_11, strain_22, strain_12, alpha, matprop, pffmodel):
+    """
+    Computes the positive strain energy density term used by the history variable.
+    This reuses the split definition in ``strain_energy_with_split`` and returns
+    the second output (``E_el_p``).
+    """
+    _, E_el_p = strain_energy_with_split(strain_11, strain_22, strain_12, alpha, matprop, pffmodel)
+    return E_el_p
+
+
 # Computes stress in each element
 def stress(strain_11, strain_22, strain_12, alpha, matprop, pffmodel):
     fun_EDegrade, _ = pffmodel.Edegrade(alpha)
