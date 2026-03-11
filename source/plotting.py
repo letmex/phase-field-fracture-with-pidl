@@ -177,3 +177,84 @@ def img_plot(field_comp, pffmodel, matprop, inp, T, area_elem, figdir, dpi=300):
 
     plt.savefig(figdir["png"]/Path('stress_p_Up_'+str(int(disp*1000)) + 'by1000'+'.png'), transparent=True, bbox_inches='tight', dpi=dpi)
     plt.savefig(figdir["pdf"]/Path('stress_p_Up_'+str(int(disp*1000)) + 'by1000'+'.pdf'), transparent=True, bbox_inches='tight', dpi=dpi)
+
+
+def plot_phase_time_history(history, figdir, phase_mode="quasi_static"):
+    """Plot phase-field indicators against load and time-like coordinates.
+
+    Expected history schema (minimum):
+        - history["disp_hist"]: prescribed displacement / load-step coordinate.
+        - history["time_hist"] (optional): physical time (if available).
+        - history["d"]: dict of phase indicators (e.g., d_max, d_mean, d_path).
+        - history["T"]: dict of traction / force indicators (e.g., T_reaction, T_mean).
+        - history["H_e"]: dict of crack-driving history indicators
+          (e.g., H_e_max, H_e_mean).
+    """
+
+    def _as_array(values, key_name):
+        arr = np.asarray(values, dtype=float)
+        if arr.ndim != 1:
+            raise ValueError(f"history['{key_name}'] must be a 1D sequence")
+        return arr
+
+    def _metric_token(group_name, metric_name):
+        if group_name == "d":
+            return metric_name.replace("_", "")
+        if group_name == "T":
+            return metric_name.replace("_", "")
+        if group_name == "H_e":
+            return metric_name.replace("H_e", "He")
+        return metric_name.replace("_", "")
+
+    def _plot_metric(x_values, y_values, group_name, metric_name, x_mode):
+        axis_suffix = "load" if x_mode == "load" else "time"
+        metric_token = _metric_token(group_name, metric_name)
+        filename = f"phase_time_history_{metric_token}_vs_{axis_suffix}"
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot(x_values, y_values, "-o", linewidth=1.5, markersize=3)
+        if x_mode == "load":
+            ax.set_xlabel("prescribed displacement (load step / prescribed displacement / pseudo-time)")
+        else:
+            time_label = "pseudo-time" if phase_mode == "quasi_static" else "time"
+            ax.set_xlabel(f"{time_label} (load step / prescribed displacement / pseudo-time)")
+        ax.set_ylabel(metric_name)
+        ax.set_title(f"{metric_name} vs {axis_suffix}")
+        ax.grid(alpha=0.3)
+
+        plt.savefig(figdir["png"]/Path(f"{filename}.png"), transparent=True, bbox_inches='tight', dpi=300)
+        plt.savefig(figdir["pdf"]/Path(f"{filename}.pdf"), transparent=True, bbox_inches='tight', dpi=300)
+        plt.close(fig)
+
+    if "disp_hist" not in history:
+        raise KeyError("history must include 'disp_hist'")
+    disp_hist = _as_array(history["disp_hist"], "disp_hist")
+
+    if "time_hist" in history:
+        time_hist = _as_array(history["time_hist"], "time_hist")
+    else:
+        time_hist = np.arange(len(disp_hist), dtype=float)
+
+    for coord_name, coord_hist in [("disp_hist", disp_hist), ("time_hist", time_hist)]:
+        if len(coord_hist) != len(disp_hist):
+            raise ValueError(
+                f"history['{coord_name}'] length ({len(coord_hist)}) must match "
+                f"history['disp_hist'] length ({len(disp_hist)})"
+            )
+
+    for group_name in ["d", "T", "H_e"]:
+        if group_name not in history:
+            raise KeyError(f"history must include '{group_name}' metrics")
+        if not isinstance(history[group_name], dict) or len(history[group_name]) == 0:
+            raise ValueError(f"history['{group_name}'] must be a non-empty dict of metric histories")
+
+        for metric_name, metric_values in history[group_name].items():
+            y_values = _as_array(metric_values, f"{group_name}.{metric_name}")
+            if len(y_values) != len(disp_hist):
+                raise ValueError(
+                    f"history['{group_name}']['{metric_name}'] length ({len(y_values)}) "
+                    f"must match history['disp_hist'] length ({len(disp_hist)})"
+                )
+
+            _plot_metric(disp_hist, y_values, group_name, metric_name, x_mode="load")
+            _plot_metric(time_hist, y_values, group_name, metric_name, x_mode="time")
