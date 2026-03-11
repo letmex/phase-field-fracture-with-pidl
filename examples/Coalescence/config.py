@@ -76,6 +76,11 @@ PFF_model_dict = {"PFF_model" : 'AT1', "se_split" : 'volumetric', "tol_ir" : 5e-
 mat_prop_dict = {"mat_E" : 1.0, "mat_nu" : 1/3, "w1" : 1.0, "l0" : 0.01}
 
 
+# Phase-field evolution configuration
+phase_mode = "static"
+phase_evo_dict = {"dt": 1.0, "eta_pf": 1.0, "w_phase_evo": 1.0}
+
+
 # Domain definition
 '''
 domain_extrema: tensor([[x_min, x_max], [y_min, y_max]])
@@ -143,6 +148,8 @@ with open(model_path/Path('model_settings.txt'), 'w') as file:
     file.write(f'\nse_split: {PFF_model_dict["se_split"]}')
     file.write(f'\ngradient_type: {numr_dict["gradient_type"]}')
     file.write(f'\ndevice: {device}')
+    file.write(f'\nphase_mode: {phase_mode}')
+    file.write(f'\nphase_evo_dict: {phase_evo_dict}')
 
 ## #############################################################################
 ## #############################################################################

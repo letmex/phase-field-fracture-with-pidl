@@ -10,10 +10,11 @@ def construct_model(PFF_model_dict, mat_prop_dict, network_dict, domain_extrema,
                         tol_ir = torch.tensor(PFF_model_dict["tol_ir"], device=device))
 
     # Material model
-    matprop = MaterialProperties(mat_E = torch.tensor(mat_prop_dict["mat_E"], device=device), 
-                                mat_nu = torch.tensor(mat_prop_dict["mat_nu"], device=device), 
-                                w1 = torch.tensor(mat_prop_dict["w1"], device=device), 
-                                l0 = torch.tensor(mat_prop_dict["l0"], device=device))
+    matprop = MaterialProperties(mat_E=torch.tensor(mat_prop_dict["mat_E"], device=device),
+                                mat_nu=torch.tensor(mat_prop_dict["mat_nu"], device=device),
+                                l0=torch.tensor(mat_prop_dict["l0"], device=device),
+                                w1=(torch.tensor(mat_prop_dict["w1"], device=device) if "w1" in mat_prop_dict else None),
+                                GcI=(torch.tensor(mat_prop_dict["GcI"], device=device) if "GcI" in mat_prop_dict else None))
 
     # Neural network
     network = NeuralNet(input_dimension=domain_extrema.shape[0], 

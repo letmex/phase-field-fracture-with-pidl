@@ -9,7 +9,7 @@ from fit import fit, fit_with_early_stopping
 from optim import *
 from plotting import plot_field
 
-def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_dict, training_dict, coarse_mesh_file, fine_mesh_file, device, trainedModel_path, intermediateModel_path, writer):
+def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_dict, training_dict, coarse_mesh_file, fine_mesh_file, device, trainedModel_path, intermediateModel_path, writer, phase_mode="static", phase_evo_dict=None):
     '''
     Neural network training: pretraining with a coarser mesh in the first stage before the main training proceeds.
     
@@ -38,7 +38,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     optimizer = get_optimizer(NNparams, "LBFGS")
     loss_data1 = fit(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                      optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, 
-                     intermediateModel_path=None, writer=writer, training_dict=training_dict)
+                     intermediateModel_path=None, writer=writer, training_dict=training_dict,
+                     phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
     loss_data = loss_data + loss_data1
 
     n_epochs = optimizer_dict["n_epochs_RPROP"]
@@ -46,7 +47,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     optimizer = get_optimizer(NNparams, "RPROP")
     loss_data2 = fit_with_early_stopping(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                                          optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, min_delta=optimizer_dict["optim_rel_tol_pretrain"], 
-                                         intermediateModel_path=None, writer=writer, training_dict=training_dict)
+                                         intermediateModel_path=None, writer=writer, training_dict=training_dict,
+                     phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
     loss_data = loss_data + loss_data2
 
     end = time.time()
@@ -81,7 +83,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
             optimizer = get_optimizer(NNparams, "LBFGS")
             loss_data1 = fit(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                              optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer,
-                             intermediateModel_path=None, writer=writer, training_dict=training_dict)
+                             intermediateModel_path=None, writer=writer, training_dict=training_dict,
+                     phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
             loss_data = loss_data + loss_data1
 
         if optimizer_dict["n_epochs_RPROP"] > 0:
@@ -90,7 +93,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
             optimizer = get_optimizer(NNparams, "RPROP")
             loss_data2 = fit_with_early_stopping(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                                                  optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, min_delta=optimizer_dict["optim_rel_tol"],
-                                                 intermediateModel_path=intermediateModel_path, writer=writer, training_dict=training_dict)
+                                                 intermediateModel_path=intermediateModel_path, writer=writer, training_dict=training_dict,
+                                                 phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
             loss_data = loss_data + loss_data2
 
         end = time.time()
