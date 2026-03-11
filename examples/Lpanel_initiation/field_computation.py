@@ -50,6 +50,8 @@ class FieldComputation:
         out_disp = out[:, 0:2]
         
         alpha = self.alpha_constraint(out[:, 2])
+        d = alpha
+        T = out[:, 3]
 
         fix_window = 1-self.fix_dist(inp)
         load_window = self.load_dist(inp)
@@ -57,10 +59,10 @@ class FieldComputation:
         u = fix_window*out_disp[:, 0]*self.lmbda
         v = fix_window*(1-load_window)*out_disp[:, 1]*self.lmbda + load_window*self.lmbda
 
-        return u, v, alpha
+        return u, v, d, T
     
     def update_hist_alpha(self, inp):
-        _, _, pred_alpha = self.fieldCalculation(inp)
+        _, _, pred_alpha, _ = self.fieldCalculation(inp)
         pred_alpha = pred_alpha.detach()
         return pred_alpha
     

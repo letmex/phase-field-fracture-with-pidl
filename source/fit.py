@@ -42,8 +42,8 @@ def fit(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matpro
                 optimizer.zero_grad()
                 if T_conn == None:
                     inp_train.requires_grad = True
-                u, v, alpha = field_comp.fieldCalculation(inp_train)
-                loss_E_el, loss_E_d, loss_hist = compute_energy(inp_train, u, v, alpha, hist_alpha, matprop, pffmodel, area_T, T_conn)
+                u, v, d, T = field_comp.fieldCalculation(inp_train)
+                loss_E_el, loss_E_d, loss_hist = compute_energy(inp_train, u, v, d, hist_alpha, matprop, pffmodel, area_T, T_conn)
                 loss_var = torch.log10(loss_E_el + loss_E_d + loss_hist)
 
                 # weight regularization
@@ -94,8 +94,8 @@ def fit_with_early_stopping(field_comp, training_set_collocation, T_conn, area_T
             optimizer.zero_grad()
             if T_conn == None:
                 inp_train.requires_grad = True
-            u, v, alpha = field_comp.fieldCalculation(inp_train)
-            loss_E_el, loss_E_d, loss_hist = compute_energy(inp_train, u, v, alpha, hist_alpha, matprop, pffmodel, area_T, T_conn)
+            u, v, d, T = field_comp.fieldCalculation(inp_train)
+            loss_E_el, loss_E_d, loss_hist = compute_energy(inp_train, u, v, d, hist_alpha, matprop, pffmodel, area_T, T_conn)
             loss_var = torch.log10(loss_E_el + loss_E_d + loss_hist)
 
             # weight regularization

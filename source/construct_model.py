@@ -17,7 +17,7 @@ def construct_model(PFF_model_dict, mat_prop_dict, network_dict, domain_extrema,
 
     # Neural network
     network = NeuralNet(input_dimension=domain_extrema.shape[0], 
-                        output_dimension=domain_extrema.shape[0]+1,
+                        output_dimension=domain_extrema.shape[0]+2,
                         n_hidden_layers=network_dict["hidden_layers"],
                         neurons=network_dict["neurons"],
                         activation=network_dict["activation"],

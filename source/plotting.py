@@ -52,8 +52,8 @@ def plot_energy(field_comp, disp, pffmodel, matprop, inp, T_conn, area_elem, tra
         field_comp.lmbda = torch.tensor(disp[j])
         if T_conn == None:
             inp.requires_grad = True
-        u, v, alpha = field_comp.fieldCalculation(inp)
-        E_el, E_d, _ = compute_energy(inp, u, v, alpha, alpha, matprop, pffmodel, area_elem, T_conn)
+        u, v, d, T_field = field_comp.fieldCalculation(inp)
+        E_el, E_d, _ = compute_energy(inp, u, v, d, d, matprop, pffmodel, area_elem, T_conn)
         E_el, E_d = E_el.detach().numpy(), E_d.detach().numpy()
         energy = np.append(energy, np.array([[E_el, E_d]]), axis = 0)
         j += 1
@@ -78,15 +78,15 @@ def plot_energy(field_comp, disp, pffmodel, matprop, inp, T_conn, area_elem, tra
 def img_plot(field_comp, pffmodel, matprop, inp, T, area_elem, figdir, dpi=300):
     if T == None:
         inp.requires_grad = True
-    u, v, alpha = field_comp.fieldCalculation(inp)
-    strain_11, strain_22, strain_12, grad_alpha_x, grad_alpha_y = gradients(inp, u, v, alpha, area_elem, T)
+    u, v, d, T_field = field_comp.fieldCalculation(inp)
+    strain_11, strain_22, strain_12, grad_alpha_x, grad_alpha_y = gradients(inp, u, v, d, area_elem, T)
 
     if T == None:
         input_elem = inp
-        alpha_elem = alpha
+        alpha_elem = d
     else:    
         input_elem = (inp[T[:, 0], :] + inp[T[:, 1], :] + inp[T[:, 2], :])/3
-        alpha_elem = (alpha[T[:, 0]] + alpha[T[:, 1]] + alpha[T[:, 2]])/3
+        alpha_elem = (d[T[:, 0]] + d[T[:, 1]] + d[T[:, 2]])/3
     stress_11, stress_22, stress_12 = stress(strain_11, strain_22, strain_12, alpha_elem, matprop, pffmodel) 
 
     stress_1 = 0.5*(stress_11 + stress_22) + torch.sqrt((0.5*(stress_11 - stress_22))**2 + stress_12**2)
@@ -95,7 +95,7 @@ def img_plot(field_comp, pffmodel, matprop, inp, T, area_elem, figdir, dpi=300):
     input_pt = copy.deepcopy(inp)
     input_el = copy.deepcopy(input_elem)
     input_pt, input_el = input_pt.detach().numpy(), input_el.detach().numpy()
-    u, v, alpha = u.detach().numpy(), v.detach().numpy(), alpha.detach().numpy()
+    u, v, d, T_field = u.detach().numpy(), v.detach().numpy(), d.detach().numpy(), T_field.detach().numpy()
     strain_11, strain_22, strain_12 = strain_11.detach().numpy(), strain_22.detach().numpy(), strain_12.detach().numpy()
     stress_11, stress_22, stress_12 = stress_11.detach().numpy(), stress_22.detach().numpy(), stress_12.detach().numpy()
     stress_1, stress_2 = stress_1.detach().numpy(), stress_2.detach().numpy()
@@ -120,10 +120,10 @@ def img_plot(field_comp, pffmodel, matprop, inp, T, area_elem, figdir, dpi=300):
     ax[1].set_title(r"$v_{\theta}$")
 
     ax[2].set_aspect('equal')
-    tpc2 = ax[2].tripcolor(input_pt[:, 0], input_pt[:, 1], T, alpha, shading='gouraud', rasterized=True)
+    tpc2 = ax[2].tripcolor(input_pt[:, 0], input_pt[:, 1], T, d, shading='gouraud', rasterized=True)
     cbar2 = fig.colorbar(tpc2, ax = ax[2])
     cbar2.formatter.set_powerlimits((0, 0))
-    ax[2].set_title(r"$\alpha_{\theta}$")
+    ax[2].set_title(r"$d_{\theta}$")
 
     plt.savefig(figdir["png"]/Path('field_Up_'+str(int(disp*1000)) + 'by1000'+'.png'), transparent=True, bbox_inches='tight', dpi=dpi)
     plt.savefig(figdir["pdf"]/Path('field_Up_'+str(int(disp*1000)) + 'by1000'+'.pdf'), transparent=True, bbox_inches='tight', dpi=dpi)
