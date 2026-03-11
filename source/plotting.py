@@ -75,6 +75,75 @@ def plot_energy(field_comp, disp, pffmodel, matprop, inp, T_conn, area_elem, tra
         print(f"No trained network available in {trainedModel_path}")
 
 
+def collect_phase_time_history(field_comp, disp, inp, trainedModel_path, T_conn=None, time=None):
+    disp_hist = []
+    phase_hist = []
+
+    j = 0
+    while True:
+        model = trainedModel_path/Path('trained_1NN_'+str(j)+'.pt')
+        if not Path.is_file(model):
+            break
+
+        field_comp.net.load_state_dict(torch.load(model, map_location=torch.device('cpu')))
+        field_comp.lmbda = torch.tensor(disp[j])
+        if T_conn == None:
+            inp.requires_grad = True
+        _, _, d, _ = field_comp.fieldCalculation(inp)
+
+        disp_hist.append(disp[j])
+        phase_hist.append(torch.max(d).detach().item())
+        j += 1
+
+    if j == 0:
+        print(f"No trained network available in {trainedModel_path}")
+        return None
+
+    time_hist = None
+    if time is not None:
+        time_hist = np.asarray(time)[0:j]
+
+    return {
+        "disp": np.asarray(disp_hist),
+        "phase": np.asarray(phase_hist),
+        "time": time_hist,
+        "step": np.arange(j)
+    }
+
+
+def plot_phase_time_history(history, figdir, phase_mode="static"):
+    if history is None:
+        return
+
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.plot(history["disp"], history["phase"], '-')
+    ax.set_xlabel(r'$U_p$')
+    ax.set_ylabel(r'$\max(d)$')
+    ax.set_title('phase-history-载荷')
+    plt.savefig(figdir["png"]/Path('phase-history_载荷.png'), transparent=True, bbox_inches='tight')
+    plt.savefig(figdir["pdf"]/Path('phase-history_载荷.pdf'), transparent=True, bbox_inches='tight')
+
+    if phase_mode == "static":
+        print("非真实时间积分，仅为步号/伪时间对齐")
+        return
+
+    fig, ax = plt.subplots(figsize=(3, 2))
+    if history["time"] is not None:
+        x = history["time"]
+        title = 'phase-history-时间'
+        xlabel = 'time'
+    else:
+        x = history["step"]
+        title = 'phase-history-pseudo-time(step index)'
+        xlabel = 'pseudo-time(step index)'
+    ax.plot(x, history["phase"], '-')
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(r'$\max(d)$')
+    ax.set_title(title)
+    plt.savefig(figdir["png"]/Path('phase-history_时间.png'), transparent=True, bbox_inches='tight')
+    plt.savefig(figdir["pdf"]/Path('phase-history_时间.pdf'), transparent=True, bbox_inches='tight')
+
+
 def img_plot(field_comp, pffmodel, matprop, inp, T, area_elem, figdir, dpi=300):
     if T == None:
         inp.requires_grad = True

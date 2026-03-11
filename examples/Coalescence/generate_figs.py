@@ -6,7 +6,14 @@ sys.path.insert(0, str(PATH_SOURCE/Path('source')))
 from field_computation import FieldComputation
 from construct_model import construct_model
 from input_data_from_mesh import prep_input_data
-from plotting import plot_mesh, plot_field, img_plot, plot_energy
+from plotting import (
+    plot_mesh,
+    plot_field,
+    img_plot,
+    plot_energy,
+    collect_phase_time_history,
+    plot_phase_time_history,
+)
 
 
 
@@ -72,3 +79,8 @@ if Path.is_dir(model_path):
 
     # plot energy vs prescribed displacement
     plot_energy(field_comp, disp, pffmodel, matprop, inp, T_conn, area_T, trainedModel_path, figdir)
+
+    phase_mode = training_dict.get("phase_mode", "static")
+    time_hist = globals().get("time", None)
+    history = collect_phase_time_history(field_comp, disp, inp, trainedModel_path, T_conn=T_conn, time=time_hist)
+    plot_phase_time_history(history, figdir, phase_mode=phase_mode)
