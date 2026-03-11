@@ -22,6 +22,8 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     Trained models and loss data are saved in the trainedModel_path directory.
     '''
     
+    dt = phase_evo_dict["dt"] if isinstance(phase_evo_dict, dict) and "dt" in phase_evo_dict else None
+
     ## #############################################################################
     # Initial training #############################################################
     # Prepare initial input data
@@ -39,7 +41,7 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     loss_data1 = fit(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                      optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, 
                      intermediateModel_path=None, writer=writer, training_dict=training_dict,
-                     phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
+                     d_prev=None, dt=dt, phase_mode=phase_mode)
     loss_data = loss_data + loss_data1
 
     n_epochs = optimizer_dict["n_epochs_RPROP"]
@@ -48,7 +50,7 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     loss_data2 = fit_with_early_stopping(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                                          optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, min_delta=optimizer_dict["optim_rel_tol_pretrain"], 
                                          intermediateModel_path=None, writer=writer, training_dict=training_dict,
-                     phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
+                     d_prev=None, dt=dt, phase_mode=phase_mode)
     loss_data = loss_data + loss_data2
 
     end = time.time()
@@ -70,6 +72,7 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
     training_set = DataLoader(torch.utils.data.TensorDataset(inp, outp), batch_size=inp.shape[0], shuffle=False)
 
     # solve BVP by step wise loading.
+    d_prev_step = None
     for j, disp_i in enumerate(disp):
         field_comp.lmbda = torch.tensor(disp_i).to(device)
         print(f'idx: {j}; displacement: {field_comp.lmbda}')
@@ -84,7 +87,7 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
             loss_data1 = fit(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                              optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer,
                              intermediateModel_path=None, writer=writer, training_dict=training_dict,
-                     phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
+                     d_prev=None, dt=dt, phase_mode=phase_mode)
             loss_data = loss_data + loss_data1
 
         if optimizer_dict["n_epochs_RPROP"] > 0:
@@ -94,13 +97,15 @@ def train(field_comp, disp, pffmodel, matprop, crack_dict, numr_dict, optimizer_
             loss_data2 = fit_with_early_stopping(field_comp, training_set, T_conn, area_T, hist_alpha, matprop, pffmodel,
                                                  optimizer_dict["weight_decay"], num_epochs=n_epochs, optimizer=optimizer, min_delta=optimizer_dict["optim_rel_tol"],
                                                  intermediateModel_path=intermediateModel_path, writer=writer, training_dict=training_dict,
-                                                 phase_mode=phase_mode, phase_evo_dict=phase_evo_dict)
+                                                 d_prev=d_prev_step, dt=dt, phase_mode=phase_mode)
             loss_data = loss_data + loss_data2
 
         end = time.time()
         print(f"Execution time: {(end-start)/60:.03f}minutes")
 
         hist_alpha = field_comp.update_hist_alpha(inp)
+        with torch.no_grad():
+            d_prev_step = field_comp.fieldCalculation(inp)[2].detach()
 
         torch.save(field_comp.net.state_dict(), trainedModel_path/Path('trained_1NN_' + str(j) + '.pt'))
         with open(trainedModel_path/Path('trainLoss_1NN_' + str(j) + '.npy'), 'wb') as file:

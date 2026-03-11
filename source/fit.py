@@ -29,7 +29,8 @@ class EarlyStopping:
 
 
 def fit(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matprop, pffmodel, 
-        weight_decay, num_epochs, optimizer, intermediateModel_path=None, writer=None, training_dict={}, phase_mode="static", phase_evo_dict=None):
+        weight_decay, num_epochs, optimizer, intermediateModel_path=None, writer=None, training_dict={},
+        d_prev=None, dt=None, phase_mode="static"):
     loss_data = list()
     
     # Loop over epochs
@@ -80,7 +81,8 @@ def fit(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matpro
 
 
 def fit_with_early_stopping(field_comp, training_set_collocation, T_conn, area_T, hist_alpha, matprop, pffmodel, 
-                            weight_decay, num_epochs, optimizer, min_delta, intermediateModel_path=None, writer=None, training_dict={}, phase_mode="static", phase_evo_dict=None):
+                            weight_decay, num_epochs, optimizer, min_delta, intermediateModel_path=None, writer=None, training_dict={},
+                            d_prev=None, dt=None, phase_mode="static"):
     loss_data = list()
     early_stopping = EarlyStopping(tol_steps=10, min_delta=min_delta, device=area_T.device)
     loss_prev = torch.tensor([0.0], device=area_T.device)
