@@ -107,7 +107,11 @@ def collect_phase_time_history(field_comp, disp, inp, trainedModel_path, T_conn=
         "disp": np.asarray(disp_hist),
         "phase": np.asarray(phase_hist),
         "time": time_hist,
-        "step": np.arange(j)
+        "step": np.arange(j),
+        # generic aliases for extensibility
+        "disp_hist": np.asarray(disp_hist),
+        "time_hist": time_hist if time_hist is not None else np.arange(j),
+        "d": {"d_max": np.asarray(phase_hist)}
     }
 
 
@@ -115,33 +119,115 @@ def plot_phase_time_history(history, figdir, phase_mode="static"):
     if history is None:
         return
 
-    fig, ax = plt.subplots(figsize=(3, 2))
-    ax.plot(history["disp"], history["phase"], '-')
-    ax.set_xlabel(r'$U_p$')
-    ax.set_ylabel(r'$\max(d)$')
-    ax.set_title('phase-history-载荷')
-    plt.savefig(figdir["png"]/Path('phase-history_载荷.png'), transparent=True, bbox_inches='tight')
-    plt.savefig(figdir["pdf"]/Path('phase-history_载荷.pdf'), transparent=True, bbox_inches='tight')
+    def _save(fig, stem):
+        plt.savefig(figdir["png"]/Path(f"{stem}.png"), transparent=True, bbox_inches='tight')
+        plt.savefig(figdir["pdf"]/Path(f"{stem}.pdf"), transparent=True, bbox_inches='tight')
+        plt.close(fig)
 
-    if phase_mode == "static":
-        print("非真实时间积分，仅为步号/伪时间对齐")
+    # Backward-compatible simple schema: disp/phase/time/step
+    if "phase" in history and "disp" in history:
+        fig, ax = plt.subplots(figsize=(3, 2))
+        ax.plot(history["disp"], history["phase"], '-')
+        ax.set_xlabel(r'$U_p$')
+        ax.set_ylabel(r'$\max(d)$')
+        ax.set_title('phase-history-载荷')
+        _save(fig, 'phase-history_载荷')
+
+        if phase_mode == "static":
+            print("非真实时间积分，仅为步号/伪时间对齐")
+            return
+
+        fig, ax = plt.subplots(figsize=(3, 2))
+        if history.get("time") is not None:
+            x = history["time"]
+            title = 'phase-history-时间'
+            xlabel = 'time'
+        else:
+            x = history.get("step", np.arange(len(history["phase"])))
+            title = 'phase-history-pseudo-time(step index)'
+            xlabel = 'pseudo-time(step index)'
+        ax.plot(x, history["phase"], '-')
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(r'$\max(d)$')
+        ax.set_title(title)
+        _save(fig, 'phase-history_时间')
         return
 
-    fig, ax = plt.subplots(figsize=(3, 2))
-    if history["time"] is not None:
-        x = history["time"]
-        title = 'phase-history-时间'
-        xlabel = 'time'
-    else:
-        x = history["step"]
-        title = 'phase-history-pseudo-time(step index)'
-        xlabel = 'pseudo-time(step index)'
-    ax.plot(x, history["phase"], '-')
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(r'$\max(d)$')
-    ax.set_title(title)
-    plt.savefig(figdir["png"]/Path('phase-history_时间.png'), transparent=True, bbox_inches='tight')
-    plt.savefig(figdir["pdf"]/Path('phase-history_时间.pdf'), transparent=True, bbox_inches='tight')
+    # Generic schema: disp_hist/time_hist + metric groups (d/T/H_e)
+    def _as_array(values, key_name):
+        arr = np.asarray(values, dtype=float)
+        if arr.ndim != 1:
+            raise ValueError(f"history['{key_name}'] must be a 1D sequence")
+        return arr
+
+    def _metric_token(group_name, metric_name):
+        if group_name in ["d", "T"]:
+            return metric_name.replace("_", "")
+        if group_name == "H_e":
+            return metric_name.replace("H_e", "He").replace("_", "")
+        return metric_name.replace("_", "")
+
+    def _plot_metric(x_values, y_values, group_name, metric_name, axis_suffix, xlabel):
+        metric_token = _metric_token(group_name, metric_name)
+        filename = f"phase_time_history_{metric_token}_vs_{axis_suffix}"
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot(x_values, y_values, "-o", linewidth=1.5, markersize=3)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(metric_name)
+        ax.set_title(f"{metric_name} vs {axis_suffix}")
+        ax.grid(alpha=0.3)
+        _save(fig, filename)
+
+    if "disp_hist" not in history:
+        raise KeyError("history must include 'disp_hist'")
+    disp_hist = _as_array(history["disp_hist"], "disp_hist")
+
+    has_real_time = "time_hist" in history and history["time_hist"] is not None
+    time_hist = _as_array(history["time_hist"], "time_hist") if has_real_time else np.arange(len(disp_hist), dtype=float)
+
+    if len(time_hist) != len(disp_hist):
+        raise ValueError("history['time_hist'] length must match history['disp_hist'] length")
+
+    required_groups = ["d", "T", "H_e"]
+    groups = [g for g in required_groups if g in history and isinstance(history[g], dict) and len(history[g]) > 0]
+    if not groups:
+        raise ValueError("history must include at least one non-empty metric group among d/T/H_e")
+
+    static_notice_printed = False
+    for group_name in groups:
+        for metric_name, metric_values in history[group_name].items():
+            y_values = _as_array(metric_values, f"{group_name}.{metric_name}")
+            if len(y_values) != len(disp_hist):
+                raise ValueError(
+                    f"history['{group_name}']['{metric_name}'] length ({len(y_values)}) "
+                    f"must match history['disp_hist'] length ({len(disp_hist)})"
+                )
+
+            _plot_metric(
+                disp_hist,
+                y_values,
+                group_name,
+                metric_name,
+                axis_suffix="load",
+                xlabel="prescribed displacement"
+            )
+
+            if phase_mode == "static":
+                if not static_notice_printed:
+                    print("非真实时间积分，仅为步号/伪时间对齐")
+                    static_notice_printed = True
+                continue
+
+            time_xlabel = "time" if has_real_time else "pseudo-time(step index)"
+            _plot_metric(
+                time_hist,
+                y_values,
+                group_name,
+                metric_name,
+                axis_suffix="time",
+                xlabel=time_xlabel
+            )
 
 
 def img_plot(field_comp, pffmodel, matprop, inp, T, area_elem, figdir, dpi=300):
