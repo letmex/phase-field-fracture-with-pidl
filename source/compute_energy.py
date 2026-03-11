@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 
 # Computes the total strain energy, damage energy and irreversibility penalty
-def compute_energy(inp, u, v, d, hist_alpha, matprop, pffmodel, area_elem, T_conn=None):
+def compute_energy(inp, u, v, d, hist_alpha, matprop, pffmodel, area_elem, T_conn=None,
+                   d_prev=None, dt=None, phase_mode="static"):
     alpha = d
     E_el, E_d, E_hist_penalty = compute_energy_per_elem(inp, u, v, alpha, hist_alpha, matprop, pffmodel, area_elem, T_conn)
     E_el_sum = torch.sum(E_el)
